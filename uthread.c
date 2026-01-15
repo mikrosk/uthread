@@ -56,11 +56,11 @@ int uthread_mutex_lock(uthread_mutex_t *mutex) {
 	if (uthread_in_interrupt) {
 		switch (mutex->currentOwner) {
 		case OWNER_MAIN:
-			if (blockingMutex) {
-				// TODO: assert?
+			if (blockingMutex)
 				return 0;
-			}
+
 			blockingMutex = mutex;
+			// TODO: this is hardcoded Timer A dependency! Introduce function pointers to enable/disable the handler
 			// there is no point in letting Timer A trigger before the mutex is unlocked
 			Jdisint(MFP_TIMERA);
 			interruptEnabled = 0;
@@ -80,8 +80,7 @@ int uthread_mutex_lock(uthread_mutex_t *mutex) {
 	} else {
 		switch (mutex->currentOwner) {
 		case OWNER_INTERRUPT:
-			// TODO: WARNING: Main thread found mutex owned by interrupt!
-			// fall through
+			return 0;
 
 		case OWNER_NONE:
 			if (interruptEnabled)
