@@ -24,9 +24,9 @@ release:
 
 install: $(TARGET)
 	install -d $(SYSROOT)/usr/include
-	install -m 644 uthread.h $(SYSROOT)/usr/include
+	install -C -m 644 uthread.h $(SYSROOT)/usr/include
 	install -d $(SYSROOT)/usr/lib/$(CPU_DIR)
-	install -m 644 $(TARGET) $(SYSROOT)/usr/lib/$(CPU_DIR)
+	install -C -m 644 $(TARGET) $(SYSROOT)/usr/lib/$(CPU_DIR)
 
 clean:
 	$(RM) -f $(TARGET) *.o

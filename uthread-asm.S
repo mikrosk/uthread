@@ -96,8 +96,6 @@ execute_handler:
 	move.l		sp,old_isp						| old_isp: uthread_interrupt_handler return point
 	move.l		new_isp_top,sp
 
-	// TODO: lower the interrupt mask to allow ACIA interrupts
-
 	not.b		SYM(uthread_in_interrupt)		| set
 	move.l		user_interrupt_handler,a0
 	jsr			(a0)
