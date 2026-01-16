@@ -25,8 +25,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-	/* interrupt_handler must be terminated by rts */
-	extern int uthread_init(void (*interrupt_handler)(void));
+	extern int uthread_init(
+		void (*interrupt_enable)(void),
+		void (*interrupt_disable)(void),
+		/* interrupt_handler must be terminated by rts */
+		void (*interrupt_handler)(void));
 	extern int uthread_deinit(void);
 
 	typedef struct {
@@ -34,7 +37,6 @@ extern "C" {
 		int lockDepth;
 	} uthread_mutex_t;
 
-	// TODO: change to return 0 on success
 	extern int uthread_mutex_init(uthread_mutex_t *mutex);
 	extern int uthread_mutex_lock(uthread_mutex_t *mutex);
 	extern int uthread_mutex_unlock(uthread_mutex_t *mutex);

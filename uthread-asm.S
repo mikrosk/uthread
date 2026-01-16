@@ -28,6 +28,9 @@
 	.global	SYM(uthread_switch_to_main)
 	.global	SYM(uthread_switch_to_interrupt)
 
+	.global	SYM(uthread_user_interrupt_enable)
+	.global	SYM(uthread_user_interrupt_disable)
+
 	.global	SYM(uthread_in_interrupt)
 
 	.extern	SYM(_stksize);
@@ -35,13 +38,18 @@
 
 	.text
 
-// int uthread_init(void (*interrupt_handler)(void));
+// int uthread_init(void (*interrupt_enable)(void), void (*interrupt_disable)(void), void (*interrupt_handler)(void));
 SYM(uthread_init):
-	moveq		#0,d0
+	tst.l		SYM(uthread_user_interrupt_enable)
+	bne.b		uthread_init_error
+	tst.l		SYM(uthread_user_interrupt_disable)
+	bne.b		uthread_init_error
 	tst.l		user_interrupt_handler
-	bne.b		uthread_init_done
+	bne.b		uthread_init_error
 
-	move.l		(4,sp),user_interrupt_handler
+	move.l		(4+0*4,sp),SYM(uthread_user_interrupt_enable)
+	move.l		(4+1*4,sp),SYM(uthread_user_interrupt_disable)
+	move.l		(4+2*4,sp),user_interrupt_handler
 
 	move.l		SYM(_stksize),-(sp)				| Malloc
 	move.w		#72,-(sp)						|
@@ -49,20 +57,22 @@ SYM(uthread_init):
 	addq.l		#6,sp							|
 
 	tst.l		d0
-	beq.b		uthread_init_done				| fail with d0.l = 0
+	beq.b		uthread_init_error
 
 	move.l		d0,new_isp_bottom				| for Mfree()
 	add.l		SYM(_stksize),d0
 	move.l		d0,new_isp_top					| new ISP
-	moveq		#1,d0
 
-uthread_init_done:
+	moveq		#0,d0
+	rts
+uthread_init_error:
+	moveq		#1,d0
 	rts
 
 // int uthread_deinit(void);
 SYM(uthread_deinit):
 	move.l		new_isp_bottom,d0
-	beq.b		uthread_deinit_done				| fail with d0.l = 0
+	beq.b		uthread_deinit_error
 
 	move.l		d0,-(sp)						| Mfree
 	move.w		#73,-(sp)						|
@@ -71,10 +81,14 @@ SYM(uthread_deinit):
 
 	clr.l		new_isp_bottom
 	clr.l		new_isp_top
+	clr.l		SYM(uthread_user_interrupt_enable)
+	clr.l		SYM(uthread_user_interrupt_disable)
 	clr.l		user_interrupt_handler
-	moveq		#1,d0
 
-uthread_deinit_done:
+	moveq		#0,d0
+	rts
+uthread_deinit_error:
+	moveq		#1,d0
 	rts
 
 SYM(uthread_interrupt_handler):
@@ -189,6 +203,10 @@ new_isp_top:
 old_isp:
 	ds.l		1
 
+SYM(uthread_user_interrupt_enable):
+	ds.l		1
+SYM(uthread_user_interrupt_disable):
+	ds.l		1
 user_interrupt_handler:
 	ds.l		1
 

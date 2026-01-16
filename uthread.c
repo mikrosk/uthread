@@ -21,8 +21,7 @@
 
 #include "uthread.h"
 
-#include <mint/osbind.h>
-#include <stdio.h>
+#include <stddef.h>
 
 // private forward declarations
 #ifdef __cplusplus
@@ -30,6 +29,9 @@ extern "C" {
 #endif
 	extern void uthread_switch_to_main(void);
 	extern void uthread_switch_to_interrupt(void);
+
+	extern void (*uthread_user_interrupt_enable)(void);
+	extern void (*uthread_user_interrupt_disable)(void);
 
 	extern volatile char uthread_in_interrupt;
 #ifdef __cplusplus
@@ -49,7 +51,7 @@ int uthread_mutex_init(uthread_mutex_t *mutex) {
 	mutex->currentOwner = OWNER_NONE;
 	mutex->lockDepth = 0;
 
-	return 1;
+	return 0;
 }
 
 int uthread_mutex_lock(uthread_mutex_t *mutex) {
@@ -57,16 +59,15 @@ int uthread_mutex_lock(uthread_mutex_t *mutex) {
 		switch (mutex->currentOwner) {
 		case OWNER_MAIN:
 			if (blockingMutex)
-				return 0;
+				return 1;
 
 			blockingMutex = mutex;
-			// TODO: this is hardcoded Timer A dependency! Introduce function pointers to enable/disable the handler
-			// there is no point in letting Timer A trigger before the mutex is unlocked
-			Jdisint(MFP_TIMERA);
+			// there is no point in letting the interrupt trigger before the mutex is unlocked
+			uthread_user_interrupt_disable();
 			interruptEnabled = 0;
 			uthread_switch_to_main();
-			// this is where uthread_switch_to_interrupt() jumps
-			// as user code (no Timer A anymore)
+			// this is where uthread_switch_to_interrupt jumps
+			// as user code (no interrupt anymore)
 			// fall through
 
 		case OWNER_NONE:
@@ -75,27 +76,29 @@ int uthread_mutex_lock(uthread_mutex_t *mutex) {
 
 		case OWNER_INTERRUPT:
 			mutex->lockDepth++;
-			return 1;
+			return 0;
 		}
 	} else {
 		switch (mutex->currentOwner) {
 		case OWNER_INTERRUPT:
-			return 0;
+			// TODO !!!!
+			return 1;
 
 		case OWNER_NONE:
 			if (interruptEnabled)
-				Jdisint(MFP_TIMERA);
+				uthread_user_interrupt_disable();
 
 			mutex->currentOwner = OWNER_MAIN;
 			mutex->lockDepth++;
 
 			if (interruptEnabled)
-				Jenabint(MFP_TIMERA);
-			return 1;
+				uthread_user_interrupt_enable();
+
+			return 0;
 
 		case OWNER_MAIN:
 			mutex->lockDepth++;
-			return 1;
+			return 0;
 		}
 	}
 
@@ -111,18 +114,18 @@ int uthread_mutex_unlock(uthread_mutex_t *mutex) {
 				mutex->currentOwner = OWNER_NONE;
 			} else {
 				if (interruptEnabled)
-					Jdisint(MFP_TIMERA);
+					uthread_user_interrupt_disable();
 
 				mutex->currentOwner = OWNER_NONE;
 
 				if (blockingMutex == mutex) {
 					blockingMutex = NULL;
 					uthread_switch_to_interrupt();
-					// this is where asm_atari_audio_handler_switch_to_interrupt() jumps
-					// when finishes AtariAudioCallback() code
+					// this is where uthread_switch_to_interrupt's return_to_main
+					// jumps when finishes interrupt code
 
 					// re-enable again, hopefully we managed to process samples in time
-					interruptEnabled = 0;
+					interruptEnabled = 1;
 				}
 
 				// it's ok if TimerA fires now but TODO:
@@ -134,12 +137,12 @@ int uthread_mutex_unlock(uthread_mutex_t *mutex) {
 				// - we must also handle if TimerA *would* fire JUST NOW but didn't
 				//   allow it yet... that's basically missing one frame above
 				if (interruptEnabled)
-					Jenabint(MFP_TIMERA);
+					uthread_user_interrupt_enable();
 			}
 		}
 
-		return 1;
+		return 0;
 	}
 
-	return 0;
+	return 1;
 }
